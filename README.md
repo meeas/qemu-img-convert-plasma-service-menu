@@ -10,6 +10,7 @@ Convert ▸
     Convert to VDI
     Convert to VHDX
     Convert to Raw Image
+    ────────────────────
     Convert to...
 ```
 
@@ -57,6 +58,30 @@ Files are installed under `${XDG_DATA_HOME:-$HOME/.local/share}`:
 
 Close and reopen Dolphin if the menu does not appear immediately. Run the
 installer again after a QEMU upgrade to refresh the direct format shortcuts.
+
+### System-wide installation
+
+To make the tool available to all desktop users, run:
+
+```bash
+sudo bash install.sh --system
+```
+
+This installs the helper and its private Python environment into
+`/usr/local/lib/qemu-image-converter`, and the desktop entries into
+`/usr/local/share/kio/servicemenus` and `/usr/local/share/applications`.
+It uses the system Python by default and keeps Python dependencies separate
+from the OS Python environment. Conversion still runs as the desktop user.
+
+A user installation takes precedence over the system installation. To switch
+to the shared installation, remove your user installation with
+`bash install.sh --uninstall`. Installing or uninstalling one scope leaves the
+other scope intact.
+
+For a different system prefix, use `--system --prefix /absolute/path` for both
+installation and removal. Its `share` directory must be included in the desktop
+session's `XDG_DATA_DIRS` for Dolphin to discover the menu. The default
+`/usr/local/share` is a standard XDG data location.
 
 ## Usage
 
@@ -159,14 +184,22 @@ environment and checks that the D-Bus dependency imports successfully.
 
 ## Uninstall
 
+Remove the current user's installation:
+
 ```bash
-data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
-rm -- "$data_dir/kio/servicemenus/qemu-image-converter.desktop"
-rm -- "$data_dir/applications/io.controlthings.qemu-image-converter.desktop"
-rm -r -- "$data_dir/qemu-image-converter"
+bash install.sh --uninstall
 ```
 
-Your source and converted disk images are kept.
+Remove the system-wide installation:
+
+```bash
+sudo bash install.sh --system --uninstall
+```
+
+Removal deletes the selected installation's desktop entries and private helper
+environment. It does not require Python, QEMU, an internet connection, or a
+running desktop. Your source and converted disk images are kept. Use the same
+`XDG_DATA_HOME` or system `--prefix` that you used when installing.
 
 ## Development
 
@@ -180,6 +213,17 @@ data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 Tests use real QEMU conversions without requiring a desktop session. See
 [current status](docs/STATUS.md) for validation evidence and manual checks,
 and [design decisions](docs/DECISIONS.md) for the integration's scope.
+
+The full installer lifecycle test runs offline when a dependency wheel is
+provided; otherwise that test is skipped:
+
+```bash
+wheel_dir="$(mktemp -d)"
+python_bin="${XDG_DATA_HOME:-$HOME/.local/share}/qemu-image-converter/venv/bin/python"
+"$python_bin" -m pip download --no-deps --dest "$wheel_dir" 'dbus-next==0.2.3'
+QEMU_CONVERTER_TEST_WHEELS="$wheel_dir" "$python_bin" -m unittest discover -s tests -v
+rm -r -- "$wheel_dir"
+```
 
 ## License
 

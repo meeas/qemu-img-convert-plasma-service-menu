@@ -2,15 +2,77 @@
 set -euo pipefail
 
 source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/qemu-image-converter"
-data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
+system=false
+uninstall=false
+prefix=/usr/local
+custom_prefix=false
+usage() {
+    cat <<'HELP'
+Usage: bash install.sh [--system] [--uninstall] [--prefix DIR]
+
+Install QEMU Image Converter for the current user by default.
+  --system       Install for all users under /usr/local (usually requires sudo).
+  --uninstall    Remove the selected user or system installation.
+  --prefix DIR   Override /usr/local for --system; use an absolute path.
+  -h, --help     Show this help.
+
+Examples:
+  bash install.sh
+  sudo bash install.sh --system
+  bash install.sh --uninstall
+  sudo bash install.sh --system --uninstall
+HELP
+}
+while (($#)); do
+    case "$1" in
+        --system) system=true ;;
+        --uninstall) uninstall=true ;;
+        --prefix)
+            [[ $# -ge 2 && "$2" == /* ]] || { echo '--prefix requires an absolute path.' >&2; exit 2; }
+            prefix="${2%/}"
+            [[ -n "$prefix" ]] || { echo '--prefix cannot be /.' >&2; exit 2; }
+            custom_prefix=true
+            shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+if "$custom_prefix" && ! "$system"; then
+    echo '--prefix requires --system.' >&2
+    exit 2
+fi
+if "$system"; then
+    data_dir="$prefix/share"
+    app_dir="$prefix/lib/qemu-image-converter"
+    # Publicly readable environments/launchers even with a restrictive root umask.
+    umask 022
+else
+    data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
+    app_dir="$data_dir/qemu-image-converter"
+fi
+[[ "$data_dir" == /* ]] || { echo 'XDG_DATA_HOME must be an absolute path.' >&2; exit 2; }
+
+if "$uninstall"; then
+    # Remove only this scope's launchers and private application environment.
+    rm -f -- "$data_dir/kio/servicemenus/qemu-image-converter.desktop" \
+        "$data_dir/applications/io.controlthings.qemu-image-converter.desktop"
+    rm -rf -- "$app_dir"
+    echo "Removed QEMU Image Converter from $app_dir"
+    exit 0
+fi
 
 command -v qemu-img >/dev/null || { echo 'qemu-img must be installed first.' >&2; exit 1; }
 command -v kdialog >/dev/null || { echo 'kdialog must be installed first (used by Convert to...).' >&2; exit 1; }
 # dbus-next 0.2.3 imports typing.no_type_check_decorator, removed in 3.15.
 # Prefer PATH's Python, but fall back to the host interpreter when necessary.
 python_bin=""
-for candidate in "${PYTHON:-python3}" /usr/bin/python3; do
+default_python=python3
+if "$system"; then
+    # A shared install must not default to an administrator's private Python.
+    default_python=/usr/bin/python3
+fi
+for candidate in "${PYTHON:-$default_python}" /usr/bin/python3; do
     if command -v "$candidate" >/dev/null && "$candidate" -c \
         'import sys; sys.exit(not ((3, 10) <= sys.version_info < (3, 15)))'; then
         python_bin="$candidate"
@@ -50,7 +112,7 @@ menu = data / 'kio/servicemenus/qemu-image-converter.desktop'
 menu.write_text('''[Desktop Entry]
 Type=Service
 MimeType=application/x-vmdk-disk;application/x-virtualbox-vmdk;application/x-qemu-disk;application/x-qed-disk;application/x-vdi-disk;application/x-vhd-disk;application/x-vhdx-disk;application/x-raw-disk-image;application/x-raw-floppy-disk-image;application/x-cd-image;application/x-apple-diskimage;
-Actions=''' + ''.join(fmt + ';' for fmt, _ in available) + '''choose;
+Actions=''' + ''.join(fmt + ';' for fmt, _ in available) + ("_SEPARATOR_;" if available else "") + '''choose;
 X-KDE-Protocols=file
 X-KDE-RequiredNumberOfUrls=1
 X-KDE-Priority=TopLevel

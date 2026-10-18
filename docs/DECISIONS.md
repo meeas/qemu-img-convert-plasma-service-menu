@@ -7,6 +7,11 @@ Direct action labels are `Convert to QCOW2` and equivalent; `Convert to...`
 opens a format selector followed by a native save dialog using kdialog.
 The application and notification identity is QEMU Image Converter.
 
+Place `Convert to...` in a final group after `_SEPARATOR_`. KIO sorts actions
+by internal action identifier within each group, so listing `choose` last in
+`Actions` alone does not place it last in the displayed menu. The separator
+uses KDE's supported grouping mechanism without changing the visible label.
+
 Match recognized disk-image MIME types and one local file. Dolphin determines
 menu visibility from MIME types; QEMU probes the source format only when a
 conversion is requested. Accept other extensions through the command line.
@@ -43,3 +48,17 @@ the child process and removes the whole staging directory.
 dbus-next 0.2.3 imports an API removed in Python 3.15. Use Python 3.10–3.14,
 falling back to the system interpreter when PATH selects an incompatible one.
 Recreate the private environment on installation and smoke-test the import.
+
+## Accepted: user installation by default, optional shared installation
+
+`install.sh` installs into the user's XDG data directory by default. `--system`
+uses `/usr/local/lib/qemu-image-converter` for code/dependencies and
+`/usr/local/share` for desktop entries. A shared install defaults to the system
+Python, uses umask 022, and keeps a private venv instead of modifying OS Python.
+`--prefix` overrides the shared prefix, also allowing real lifecycle testing
+without root or writes to OS directories.
+
+`--uninstall` removes only the chosen scope's private application directory and
+desktop entries, without runtime dependencies or network access. It preserves
+the other scope and image files. Switching scopes is explicit; a shared install
+does not remove users' installations. User desktop entries take precedence.
